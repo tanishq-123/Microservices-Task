@@ -4,7 +4,10 @@ const app = express();
 app.use(express.json());
 const port = 3002;
 
-const orders = [];
+const products = [
+    { id: 1, name: 'Laptop', quantity: 10 },
+    { id: 2, name: 'Phone', quantity: 10 }
+  ];
 
 app.get('/health', (req, res) => {
   res.json({ status: 'Order Service is healthy' });
