@@ -111,7 +111,64 @@ kubectl logs deploy/order-service
 ```
 ![Pod logs](screenshots/16-pod-logs.png)
 
-## 8. Troubleshooting (issues faced and fixed during deployment and testing)
+## 8. Ingress (host-based routing)
+
+### 8.1 Enable the NGINX Ingress controller
+```bash
+minikube addons enable ingress
+kubectl wait -n ingress-nginx --for=condition=ready pod \
+  --selector=app.kubernetes.io/component=controller --timeout=180s
+kubectl get pods -n ingress-nginx
+```
+
+![Ingress addon enabled, controller ready](screenshots/17-ingress-addon-enabled.png)
+
+### 8.2 Apply the Ingress resources
+```bash
+kubectl apply -f submission/ingress/
+kubectl get ingress
+```
+![Ingress resources created](screenshots/18-ingress-applied.png)
+
+Routing rules for host `microservices.local`:
+
+| Path | Backend | Rewritten to |
+|---|---|---|
+| `/api/users` | user-service:3000 | `/users` |
+| `/api/products` | product-service:3001 | `/products` |
+| `/api/orders` | order-service:3002 | `/orders` |
+| `/` | gateway-service:3003 | unchanged |
+
+The services serve `/users`, `/products` and `/orders` without the `/api` prefix, so each `/api/*` path is rewritten before it reaches the service.
+`rewrite-target` applies to a whole Ingress resource, which is why there is one Ingress per rewritten path plus one for the gateway.
+
+### 8.3 Reach the Ingress from macOS (Docker driver)
+```bash
+echo "127.0.0.1 microservices.local" | sudo tee -a /etc/hosts
+minikube tunnel        # keep this terminal open; it asks for your password
+```
+![Hosts entry and tunnel started](screenshots/19-hosts-entry-and-tunnel.png)
+
+### 8.4 Test
+```bash
+curl http://microservices.local/api/users
+curl http://microservices.local/api/products
+curl http://microservices.local/api/orders
+curl http://microservices.local/health          # "/" -> gateway
+```
+![Requests through the Ingress](screenshots/20-ingress-curl-tests.png)
+
+Without the hosts entry, use `curl -H "Host: microservices.local" http://127.0.0.1/api/users`.
+
+Confirm which backend served each request:
+```bash
+kubectl logs -n ingress-nginx -l app.kubernetes.io/component=controller --tail=20
+```
+The log lines name the upstream, for example `default-user-service-3000`.
+
+![Ingress controller logs showing upstream per path](screenshots/21-ingress-controller-logs.png)
+
+## 9. Troubleshooting
 | Symptom | Cause / fix |
 |---|---|
 | `failed to download openapi ... eks.amazonaws.com` | `kubectl` points at another cluster. Run `kubectl config use-context minikube`. |
@@ -121,8 +178,11 @@ kubectl logs deploy/order-service
 | Pod `0/1` Ready | Readiness probe failing. Check `kubectl describe pod <name>`. |
 | Gateway returns `Error fetching ...` | Check `kubectl get svc` and `kubectl get endpoints`. |
 | `address already in use` on port-forward | Stop the old port-forward or use another local port. |
+| `failed calling webhook` on Ingress apply | Controller not ready yet. Wait for the `ingress-nginx` controller pod, then apply again. |
+| `404` from `/api/users` via Ingress | Check the `rewrite-target` annotation and the Ingress `PATH`/`HOST` in `kubectl describe ingress`. |
+| `microservices.local` not resolving or hanging | Add the `/etc/hosts` entry and keep `minikube tunnel` running. |
 
-## 9. Cleanup
+## 10. Cleanup
 ```bash
 kubectl delete -f submission/services/ -f submission/deployments/
 minikube stop     # or: minikube delete

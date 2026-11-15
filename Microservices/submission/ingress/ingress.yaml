@@ -1,0 +1,85 @@
+# Host-based routing for the microservices (NGINX Ingress controller).
+# The backend services expose /users, /products and /orders (no /api prefix),
+# so each /api/* path is rewritten before it reaches the service.
+# rewrite-target is per Ingress resource, hence one Ingress per rewritten path.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: user-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /users/$2
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: microservices.local
+      http:
+        paths:
+          - path: /api/users(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: product-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /products/$2
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: microservices.local
+      http:
+        paths:
+          - path: /api/products(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: product-service
+                port:
+                  number: 3001
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: order-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /orders/$2
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: microservices.local
+      http:
+        paths:
+          - path: /api/orders(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: order-service
+                port:
+                  number: 3002
+---
+# Everything else ("/") goes to the gateway, no rewrite.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gateway-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: microservices.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway-service
+                port:
+                  number: 3003
